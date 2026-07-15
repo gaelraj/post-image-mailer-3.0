@@ -1,6 +1,5 @@
 package com.school.hei.endpoint;
 
-import com.school.hei.dto.request.ImageRequest;
 import com.school.hei.dto.response.ImageResponse;
 import com.school.hei.endpoint.event.EventProducer;
 import com.school.hei.endpoint.event.model.ImageReceived;
@@ -15,11 +14,10 @@ import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.SneakyThrows;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @AllArgsConstructor
@@ -30,49 +28,44 @@ public class ImageController {
   private final ImageRepository imageRepository;
   private final EventProducer<ImageReceived> eventProducer;
 
-  @PostMapping("/images")
+  @PostMapping(value = "/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   @SneakyThrows
-  public ResponseEntity<ImageResponse> submit(@ModelAttribute ImageRequest request) {
+  public ResponseEntity<ImageResponse> submit(
+          @RequestPart("file") MultipartFile file, @RequestParam("email") String email) {
 
-    if (!imageFormatValidator.isValid(request.getFile())) {
+    if (!imageFormatValidator.isValid(file)) {
       return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
     }
 
     var id = UUID.randomUUID();
     var originalKey = "images/original/" + id;
 
-    var tempFile =
-        java.io.File.createTempFile("upload-", "-" + request.getFile().getOriginalFilename());
-    request.getFile().transferTo(tempFile);
+    var tempFile = java.io.File.createTempFile("upload-", "-" + file.getOriginalFilename());
+    file.transferTo(tempFile);
     bucketComponent.upload(tempFile, originalKey);
 
-    var image =
-        new Image(
-            id,
-            request.getFile().getOriginalFilename(),
-            request.getEmail(),
-            Instant.now(),
-            originalKey,
-            null);
+    var image = new Image(id, file.getOriginalFilename(), email, Instant.now(), originalKey, null);
+
     imageRepository.save(image);
 
     var event =
-        ImageReceived.builder()
-            .imageId(id)
-            .originalS3Key(originalKey)
-            .email(request.getEmail())
-            .fileName(request.getFile().getOriginalFilename())
-            .build();
+            ImageReceived.builder()
+                    .imageId(id)
+                    .originalS3Key(originalKey)
+                    .email(email)
+                    .fileName(file.getOriginalFilename())
+                    .build();
+
     eventProducer.accept(List.of(event));
 
     var response =
-        ImageResponse.builder()
-            .id(id)
-            .fileName(image.getFileName())
-            .email(request.getEmail())
-            .createdAt(image.getCreatedAt())
-            .status("PROCESSING")
-            .build();
+            ImageResponse.builder()
+                    .id(id)
+                    .fileName(image.getFileName())
+                    .email(email)
+                    .createdAt(image.getCreatedAt())
+                    .status("PROCESSING")
+                    .build();
 
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
