@@ -31,7 +31,7 @@ public class ImageController {
   @PostMapping(value = "/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   @SneakyThrows
   public ResponseEntity<ImageResponse> submit(
-          @RequestPart("file") MultipartFile file, @RequestParam("email") String email) {
+      @RequestPart("file") MultipartFile file, @RequestParam("email") String email) {
 
     if (!imageFormatValidator.isValid(file)) {
       return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
@@ -49,23 +49,23 @@ public class ImageController {
     imageRepository.save(image);
 
     var event =
-            ImageReceived.builder()
-                    .imageId(id)
-                    .originalS3Key(originalKey)
-                    .email(email)
-                    .fileName(file.getOriginalFilename())
-                    .build();
+        ImageReceived.builder()
+            .imageId(id)
+            .originalS3Key(originalKey)
+            .email(email)
+            .fileName(file.getOriginalFilename())
+            .build();
 
     eventProducer.accept(List.of(event));
 
     var response =
-            ImageResponse.builder()
-                    .id(id)
-                    .fileName(image.getFileName())
-                    .email(email)
-                    .createdAt(image.getCreatedAt())
-                    .status("PROCESSING")
-                    .build();
+        ImageResponse.builder()
+            .id(id)
+            .fileName(image.getFileName())
+            .email(email)
+            .createdAt(image.getCreatedAt())
+            .status("PROCESSING")
+            .build();
 
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
