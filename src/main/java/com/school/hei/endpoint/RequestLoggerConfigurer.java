@@ -4,7 +4,6 @@ import static com.school.hei.concurrency.ThreadRenamer.renameFrontalThread;
 import static com.school.hei.concurrency.ThreadRenamer.renameThread;
 import static java.lang.System.currentTimeMillis;
 import static java.lang.Thread.currentThread;
-import static java.util.stream.Collectors.joining;
 
 import com.school.hei.PojaGenerated;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +20,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 @AllArgsConstructor
 public class RequestLoggerConfigurer implements WebMvcConfigurer {
+
   @Override
   public void addInterceptors(InterceptorRegistry registry) {
     registry.addInterceptor(new RequestLogger());
@@ -44,23 +44,16 @@ public class RequestLoggerConfigurer implements WebMvcConfigurer {
       request.setAttribute(THREAD_OLD_NAME, oldThreadName);
       renameFrontalThread(current);
 
-      String parameters;
-      try {
-        parameters =
-            request.getParameterMap().entrySet().stream()
-                .map(entry -> entry.getKey() + "=" + String.join(",", entry.getValue()))
-                .collect(joining(";"));
-      } catch (NullPointerException e) {
-        parameters = "";
-      };
+      String parameters = request.getQueryString() == null ? "" : request.getQueryString();
 
       log.info(
-          "preHandle: " + "method={}, uri={}, parameters=[{}], " + "handler={}, oldThreadName={}",
+          "preHandle: method={}, uri={}, parameters=[{}], handler={}, oldThreadName={}",
           request.getMethod(),
           request.getRequestURI(),
           parameters,
           handler,
           oldThreadName);
+
       return true;
     }
 
@@ -70,9 +63,18 @@ public class RequestLoggerConfigurer implements WebMvcConfigurer {
         HttpServletResponse response,
         Object handler,
         @Nullable Exception ex) {
-      long duration = currentTimeMillis() - (long) request.getAttribute(REQUEST_START_TIME);
+      Object startTimeAttribute = request.getAttribute(REQUEST_START_TIME);
+      long startTime =
+          startTimeAttribute instanceof Long ? (Long) startTimeAttribute : currentTimeMillis();
+
+      long duration = currentTimeMillis() - startTime;
+
       log.info("afterCompletion: status={}, duration={}ms", response.getStatus(), duration, ex);
-      renameThread(currentThread(), request.getAttribute(THREAD_OLD_NAME).toString());
+
+      Object oldThreadNameAttribute = request.getAttribute(THREAD_OLD_NAME);
+      if (oldThreadNameAttribute != null) {
+        renameThread(currentThread(), oldThreadNameAttribute.toString());
+      }
     }
   }
 }
